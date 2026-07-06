@@ -39,26 +39,15 @@ struct SubGhzGPS {
     uint8_t fix_minute;
     uint8_t fix_hour;
 
-    /**
-     * Deinitialize SubGhzGPS object
-     * To be used by plugin handler
-     * 
-     * @param subghz_gps SubGhzGPS object
-     * @return void
-    */
     void (*deinit)(SubGhzGPS* subghz_gps);
-
-    /**
-     * Concatenate realtime GPS info to string
-     * 
-     * @param subghz_gps SubGhzGPS object
-     * @param descr Output string
-     * @param latitude Latitude
-     * @param longitude Longitude
-     * @return void
-    */
-    void (*cat_realtime)(SubGhzGPS* subghz_gps, FuriString* descr, float latitude, float longitude);
 };
+
+// Realtime info string (distance/direction/sats/time), shared by all sources.
+void subghz_gps_cat_realtime(
+    SubGhzGPS* subghz_gps,
+    FuriString* descr,
+    float latitude,
+    float longitude);
 
 /**
  * Load the UART GPS plugin (.fal) for NMEA or Ubox.

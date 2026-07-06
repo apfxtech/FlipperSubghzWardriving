@@ -3,8 +3,72 @@
 //#include <expansion/expansion.h>
 #include <loader/firmware_api/firmware_api.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define TAG "SubGhzWarDrivingGPS"
+
+// Single-precision Haversine so the always-loaded FAP avoids the heavy double
+// soft-float (sqrtf is the M4F hardware VSQRT.F32).
+static float subghz_gps_deg2rad(float deg) {
+    return deg * (float)M_PI / 180.0f;
+}
+
+static float subghz_gps_calc_distance(float lat1d, float lon1d, float lat2d, float lon2d) {
+    float lat1r = subghz_gps_deg2rad(lat1d);
+    float lon1r = subghz_gps_deg2rad(lon1d);
+    float lat2r = subghz_gps_deg2rad(lat2d);
+    float lon2r = subghz_gps_deg2rad(lon2d);
+    float u = sinf((lat2r - lat1r) / 2.0f);
+    float v = sinf((lon2r - lon1r) / 2.0f);
+    return 2.0f * 6371.0f * asinf(sqrtf(u * u + cosf(lat1r) * cosf(lat2r) * v * v));
+}
+
+static float subghz_gps_calc_angle(float lat1, float lon1, float lat2, float lon2) {
+    return atan2f(lat1 - lat2, lon1 - lon2) * 180.0f / (float)M_PI;
+}
+
+void subghz_gps_cat_realtime(
+    SubGhzGPS* subghz_gps,
+    FuriString* descr,
+    float latitude,
+    float longitude) {
+    float distance =
+        subghz_gps_calc_distance(latitude, longitude, subghz_gps->latitude, subghz_gps->longitude);
+    float angle =
+        subghz_gps_calc_angle(latitude, longitude, subghz_gps->latitude, subghz_gps->longitude);
+
+    char* angle_str = "?";
+    if(angle > -22.5f && angle <= 22.5f) {
+        angle_str = "E";
+    } else if(angle > 22.5f && angle <= 67.5f) {
+        angle_str = "NE";
+    } else if(angle > 67.5f && angle <= 112.5f) {
+        angle_str = "N";
+    } else if(angle > 112.5f && angle <= 157.5f) {
+        angle_str = "NW";
+    } else if(angle < -22.5f && angle >= -67.5f) {
+        angle_str = "SE";
+    } else if(angle < -67.5f && angle >= -112.5f) {
+        angle_str = "S";
+    } else if(angle < -112.5f && angle >= -157.5f) {
+        angle_str = "SW";
+    } else if(angle < -157.5f || angle >= 157.5f) {
+        angle_str = "W";
+    }
+
+    furi_string_cat_printf(
+        descr,
+        "Realtime:  Sats: %d\r\n"
+        "Distance: %.2f%s Dir: %s\r\n"
+        "GPS time: %02d:%02d:%02d UTC",
+        subghz_gps->satellites,
+        (double)(subghz_gps->satellites > 0 ? distance > 1 ? distance : distance * 1000 : 0),
+        distance > 1 ? "km" : "m",
+        angle_str,
+        subghz_gps->fix_hour,
+        subghz_gps->fix_minute,
+        subghz_gps->fix_second);
+}
 
 SubGhzGPS* subghz_gps_plugin_init(SubGhzGpsProtocol protocol, uint32_t baudrate) {
     //bool connected = expansion_is_connected(furi_record_open(RECORD_EXPANSION));

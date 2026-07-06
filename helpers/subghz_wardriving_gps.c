@@ -158,70 +158,6 @@ static void subghz_gps_deinit(SubGhzGPS* subghz_gps) {
     furi_stream_buffer_free(subghz_gps->rx_stream);
 }
 
-static float subghz_gps_deg2rad(float deg) {
-    return (deg * M_PI / 180);
-}
-
-static float subghz_gps_calc_distance(float lat1d, float lon1d, float lat2d, float lon2d) {
-    float lat1r, lon1r, lat2r, lon2r;
-    double u, v;
-    lat1r = subghz_gps_deg2rad(lat1d);
-    lon1r = subghz_gps_deg2rad(lon1d);
-    lat2r = subghz_gps_deg2rad(lat2d);
-    lon2r = subghz_gps_deg2rad(lon2d);
-    u = sin((lat2r - lat1r) / 2);
-    v = sin((lon2r - lon1r) / 2);
-    return 2 * 6371 * asin(sqrt(u * u + cos(lat1r) * cos(lat2r) * v * v));
-}
-
-static float subghz_gps_calc_angle(float lat1, float lon1, float lat2, float lon2) {
-    return atan2(lat1 - lat2, lon1 - lon2) * 180 / (double)M_PI;
-}
-
-static void subghz_gps_cat_realtime(
-    SubGhzGPS* subghz_gps,
-    FuriString* descr,
-    float latitude,
-    float longitude) {
-    float distance =
-        subghz_gps_calc_distance(latitude, longitude, subghz_gps->latitude, subghz_gps->longitude);
-
-    float angle =
-        subghz_gps_calc_angle(latitude, longitude, subghz_gps->latitude, subghz_gps->longitude);
-
-    char* angle_str = "?";
-    if(angle > -22.5 && angle <= 22.5) {
-        angle_str = "E";
-    } else if(angle > 22.5 && angle <= 67.5) {
-        angle_str = "NE";
-    } else if(angle > 67.5 && angle <= 112.5) {
-        angle_str = "N";
-    } else if(angle > 112.5 && angle <= 157.5) {
-        angle_str = "NW";
-    } else if(angle < -22.5 && angle >= -67.5) {
-        angle_str = "SE";
-    } else if(angle < -67.5 && angle >= -112.5) {
-        angle_str = "S";
-    } else if(angle < -112.5 && angle >= -157.5) {
-        angle_str = "SW";
-    } else if(angle < -157.5 || angle >= 157.5) {
-        angle_str = "W";
-    }
-
-    furi_string_cat_printf(
-        descr,
-        "Realtime:  Sats: %d\r\n"
-        "Distance: %.2f%s Dir: %s\r\n"
-        "GPS time: %02d:%02d:%02d UTC",
-        subghz_gps->satellites,
-        (double)(subghz_gps->satellites > 0 ? distance > 1 ? distance : distance * 1000 : 0),
-        distance > 1 ? "km" : "m",
-        angle_str,
-        subghz_gps->fix_hour,
-        subghz_gps->fix_minute,
-        subghz_gps->fix_second);
-}
-
 static void subghz_gps_init(SubGhzGPS* subghz_gps, SubGhzGpsProtocol protocol, uint32_t baudrate) {
     subghz_gps->latitude = NAN;
     subghz_gps->longitude = NAN;
@@ -247,7 +183,6 @@ static void subghz_gps_init(SubGhzGPS* subghz_gps, SubGhzGpsProtocol protocol, u
         subghz_gps->serial_handle, subghz_gps_uart_on_irq_cb, subghz_gps, false);
 
     subghz_gps->deinit = &subghz_gps_deinit;
-    subghz_gps->cat_realtime = &subghz_gps_cat_realtime;
 }
 
 static const FlipperAppPluginDescriptor plugin_descriptor = {
