@@ -6,7 +6,7 @@
 
 #define TAG "SubGhzWarDrivingGPS"
 
-SubGhzGPS* subghz_gps_plugin_init(uint32_t baudrate) {
+SubGhzGPS* subghz_gps_plugin_init(SubGhzGpsProtocol protocol, uint32_t baudrate) {
     //bool connected = expansion_is_connected(furi_record_open(RECORD_EXPANSION));
     //furi_record_close(RECORD_EXPANSION);
     //if(connected) return NULL;
@@ -44,7 +44,7 @@ SubGhzGPS* subghz_gps_plugin_init(uint32_t baudrate) {
             break;
         }
 
-        if(app_descriptor->ep_api_version != 1) {
+        if(app_descriptor->ep_api_version != 2) {
             FURI_LOG_E(
                 TAG,
                 "GPS plugin version %" PRIu32 " doesn't match\r\n",
@@ -52,12 +52,13 @@ SubGhzGPS* subghz_gps_plugin_init(uint32_t baudrate) {
             break;
         }
 
-        void (*subghz_gps_init)(SubGhzGPS* subghz_gps, uint32_t baudrate) =
+        void (*subghz_gps_init)(
+            SubGhzGPS* subghz_gps, SubGhzGpsProtocol protocol, uint32_t baudrate) =
             app_descriptor->entry_point;
 
         SubGhzGPS* subghz_gps = malloc(sizeof(SubGhzGPS));
         subghz_gps->plugin_app = plugin_app;
-        subghz_gps_init(subghz_gps, baudrate);
+        subghz_gps_init(subghz_gps, protocol, baudrate);
         return subghz_gps;
 
     } while(false);

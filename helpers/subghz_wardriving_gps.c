@@ -1,5 +1,6 @@
 #include "subghz_wardriving_gps.h"
 #include "minmea.h"
+#include "ubox.h"
 
 #define UART_CH (FuriHalSerialIdUsart)
 
@@ -65,6 +66,20 @@ static void subghz_gps_uart_on_irq_cb(
     }
 }
 
+static void subghz_gps_uart_parse_ubox(SubGhzGPS* subghz_gps, const uint8_t* data, size_t len) {
+    UboxPvt pvt;
+    for(size_t i = 0; i < len; i++) {
+        if(ubox_rx_byte(&subghz_gps->ubox, data[i], &pvt)) {
+            subghz_gps->latitude = pvt.lat * 1e-7f;
+            subghz_gps->longitude = pvt.lon * 1e-7f;
+            subghz_gps->satellites = pvt.sats;
+            subghz_gps->fix_hour = pvt.hour;
+            subghz_gps->fix_minute = pvt.min;
+            subghz_gps->fix_second = pvt.sec;
+        }
+    }
+}
+
 static int32_t subghz_gps_uart_worker(void* context) {
     SubGhzGPS* subghz_gps = (SubGhzGPS*)context;
 
@@ -88,31 +103,37 @@ static int32_t subghz_gps_uart_worker(void* context) {
                     RX_BUF_SIZE - rx_offset,
                     0);
 
-                if(len > 0) {
-                    rx_offset += len;
-                    subghz_gps->rx_buf[rx_offset] = '\0';
+                if(len == 0) continue;
 
-                    char* current_line = (char*)subghz_gps->rx_buf;
-                    while(true) {
-                        while(*current_line == '\0' &&
-                              current_line < (char*)subghz_gps->rx_buf + rx_offset) {
-                            current_line++;
-                        }
+                if(subghz_gps->protocol == SubGhzGpsProtocolUbox) {
+                    subghz_gps_uart_parse_ubox(subghz_gps, subghz_gps->rx_buf + rx_offset, len);
+                    rx_offset = 0;
+                    continue;
+                }
 
-                        char* next_line = strchr(current_line, '\n');
-                        if(next_line) {
-                            *next_line = '\0';
-                            subghz_gps_uart_parse_nmea(subghz_gps, current_line);
-                            current_line = next_line + 1;
-                        } else {
-                            if(current_line > (char*)subghz_gps->rx_buf) {
-                                rx_offset = 0;
-                                while(*current_line) {
-                                    subghz_gps->rx_buf[rx_offset++] = *(current_line++);
-                                }
+                rx_offset += len;
+                subghz_gps->rx_buf[rx_offset] = '\0';
+
+                char* current_line = (char*)subghz_gps->rx_buf;
+                while(true) {
+                    while(*current_line == '\0' &&
+                          current_line < (char*)subghz_gps->rx_buf + rx_offset) {
+                        current_line++;
+                    }
+
+                    char* next_line = strchr(current_line, '\n');
+                    if(next_line) {
+                        *next_line = '\0';
+                        subghz_gps_uart_parse_nmea(subghz_gps, current_line);
+                        current_line = next_line + 1;
+                    } else {
+                        if(current_line > (char*)subghz_gps->rx_buf) {
+                            rx_offset = 0;
+                            while(*current_line) {
+                                subghz_gps->rx_buf[rx_offset++] = *(current_line++);
                             }
-                            break;
                         }
+                        break;
                     }
                 }
             } while(len > 0);
@@ -201,13 +222,16 @@ static void subghz_gps_cat_realtime(
         subghz_gps->fix_second);
 }
 
-static void subghz_gps_init(SubGhzGPS* subghz_gps, uint32_t baudrate) {
+static void subghz_gps_init(SubGhzGPS* subghz_gps, SubGhzGpsProtocol protocol, uint32_t baudrate) {
     subghz_gps->latitude = NAN;
     subghz_gps->longitude = NAN;
     subghz_gps->satellites = 0;
     subghz_gps->fix_hour = 0;
     subghz_gps->fix_minute = 0;
     subghz_gps->fix_second = 0;
+
+    subghz_gps->protocol = protocol;
+    ubox_rx_init(&subghz_gps->ubox);
 
     subghz_gps->rx_stream = furi_stream_buffer_alloc(RX_BUF_SIZE, 1);
 
@@ -228,7 +252,7 @@ static void subghz_gps_init(SubGhzGPS* subghz_gps, uint32_t baudrate) {
 
 static const FlipperAppPluginDescriptor plugin_descriptor = {
     .appid = "subghz_plugin_gps",
-    .ep_api_version = 1,
+    .ep_api_version = 2,
     .entry_point = &subghz_gps_init,
 };
 
