@@ -22,6 +22,7 @@ jobs:
         id: build-app
         uses: flipperdevices/flipperzero-ufbt-action@v0.1
         with:
+          sdk-channel: development
           sdk-index-url: https://up.unleashedflip.com/directory.json
 
       - name: Publish GitHub release
